@@ -4,6 +4,12 @@ on:
   push:
     branches: ["main"]
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Déployer le groupe de ressources Azure"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -43,5 +49,9 @@ jobs:
       - name: Valider la configuration
         run: terraform validate
 
-      - name: Générer le plan
-        run: terraform plan -input=false
+      - name: Générer le plan du groupe de ressources
+        run: terraform plan -input=false -target=azurerm_resource_group.lab -out=tfplan
+
+      - name: Déployer le groupe de ressources
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main'
+        run: terraform apply -input=false tfplan
