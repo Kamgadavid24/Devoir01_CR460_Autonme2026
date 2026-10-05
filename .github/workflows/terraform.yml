@@ -49,9 +49,9 @@ jobs:
       - name: Valider la configuration
         run: terraform validate
 
-      - name: Générer le plan du groupe de ressources
-        run: terraform plan -input=false -target=azurerm_resource_group.lab -out=tfplan
+      - name: Générer le plan
+        run: terraform plan -input=false -out=tfplan
 
-      - name: Déployer le groupe de ressources
+      - name: Déployer les ressources Azure
         if: github.ref == 'refs/heads/main'
         run: terraform apply -input=false tfplan
