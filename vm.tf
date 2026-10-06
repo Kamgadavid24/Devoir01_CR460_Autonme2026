@@ -14,14 +14,14 @@ resource "azurerm_windows_virtual_machine" "windows" {
   name                = "vm-win-cr460"
   computer_name       = "win-cr460"
   resource_group_name = azurerm_resource_group.lab.name
-  location            = azurerm_resource_group.lab.location
-  size                = "Standard_B2s"
+  location            = "canadaeast"
+  size                = "Standard_B2s_v2"
 
   admin_username = "kamga_david"
   admin_password = var.vm_admin_password
 
   network_interface_ids = [
-    azurerm_network_interface.windows.id
+    azurerm_network_interface.windows_est.id
   ]
 
   os_disk {
@@ -33,7 +33,7 @@ resource "azurerm_windows_virtual_machine" "windows" {
   source_image_reference {
     publisher = "MicrosoftWindowsServer"
     offer     = "WindowsServer"
-    sku       = "2022-datacenter"
+    sku       = "2022-datacenter-g2"
     version   = "latest"
   }
 
@@ -44,5 +44,5 @@ resource "azurerm_windows_virtual_machine" "windows" {
 }
 
 output "windows_private_ip" {
-  value = azurerm_network_interface.windows.private_ip_address
+  value = azurerm_network_interface.windows_est.private_ip_address
 }
