@@ -21,3 +21,9 @@ variable "subnet_name" {
   type        = string
   default     = "subnet-serveurs"
 }
+
+variable "vm_admin_password" {
+  description = "Davidkamga@cr460"
+  type        = string
+  sensitive   = true
+}
