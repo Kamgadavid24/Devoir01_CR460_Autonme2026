@@ -18,7 +18,7 @@ resource "azurerm_key_vault" "lab" {
 
   access_policy {
     tenant_id = data.azurerm_client_config.current.tenant_id
-    object_id = data.azurerm_client_config.current.object_id
+    object_id = "099aa132-4fd2-49c4-a5c3-4a9f20492721"
 
     secret_permissions = [
       "Get",
