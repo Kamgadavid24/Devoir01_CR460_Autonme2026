@@ -6,9 +6,15 @@ resource "azurerm_container_group" "docker" {
   os_type             = "Linux"
   restart_policy      = "Always"
 
+  image_registry_credential {
+    server   = azurerm_container_registry.lab.login_server
+    username = azurerm_container_registry.lab.admin_username
+    password = azurerm_container_registry.lab.admin_password
+  }
+
   container {
     name   = "nginx-cr460"
-    image  = "docker.io/library/nginx:stable"
+    image  = "${azurerm_container_registry.lab.login_server}/cr460-web:${var.container_image_tag}"
     cpu    = 1
     memory = 1.5
 

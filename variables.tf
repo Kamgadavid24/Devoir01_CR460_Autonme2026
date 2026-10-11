@@ -45,3 +45,9 @@ variable "vm_size" {
   type        = string
   default     = "Standard_B2s_v2"
 }
+
+variable "container_image_tag" {
+  description = "Version de l'image Docker publiée dans ACR"
+  type        = string
+  default     = "latest"
+}

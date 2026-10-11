@@ -4,12 +4,6 @@ on:
   push:
     branches: ["main"]
   workflow_dispatch:
-    inputs:
-      deploy:
-        description: "Déployer le groupe de ressources Azure"
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -20,8 +14,9 @@ concurrency:
 
 jobs:
   terraform:
-    name: Vérification et plan
+    name: Publication Docker et déploiement Azure
     runs-on: ubuntu-22.04
+    if: github.ref == 'refs/heads/main'
 
     env:
       TF_IN_AUTOMATION: "true"
@@ -31,6 +26,7 @@ jobs:
       ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
       ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
       TF_VAR_vm_admin_password: ${{ secrets.VM_ADMIN_PASSWORD }}
+      TF_VAR_container_image_tag: ${{ github.sha }}
 
     steps:
       - name: Récupérer les fichiers du dépôt
@@ -40,6 +36,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+          terraform_wrapper: false
 
       - name: Vérifier le format
         run: terraform fmt -check -recursive
@@ -50,9 +47,45 @@ jobs:
       - name: Valider la configuration
         run: terraform validate
 
+      - name: Se connecter à Azure
+        shell: bash
+        run: |
+          az login --service-principal \
+            --username "$ARM_CLIENT_ID" \
+            --password "$ARM_CLIENT_SECRET" \
+            --tenant "$ARM_TENANT_ID" \
+            --output none
+          az account set --subscription "$ARM_SUBSCRIPTION_ID"
+
+      - name: Se connecter au registre ACR
+        shell: bash
+        run: |
+          ACR_NAME=$(terraform output -raw acr_name)
+          ACR_SERVER=$(az acr show --name "$ACR_NAME" --query loginServer --output tsv)
+          ACR_USERNAME=$(az acr credential show --name "$ACR_NAME" --query username --output tsv)
+          ACR_PASSWORD=$(az acr credential show --name "$ACR_NAME" --query 'passwords[0].value' --output tsv)
+
+          echo "::add-mask::$ACR_PASSWORD"
+          printf '%s' "$ACR_PASSWORD" | docker login "$ACR_SERVER" \
+            --username "$ACR_USERNAME" \
+            --password-stdin
+
+          echo "ACR_SERVER=$ACR_SERVER" >> "$GITHUB_ENV"
+
+      - name: Construire l'image Docker
+        run: |
+          docker build \
+            --tag "$ACR_SERVER/cr460-web:$GITHUB_SHA" \
+            .
+
+      - name: Publier l'image dans ACR
+        run: docker push "$ACR_SERVER/cr460-web:$GITHUB_SHA"
+
       - name: Générer le plan
         run: terraform plan -input=false -out=tfplan
 
       - name: Déployer les ressources Azure
-        if: github.ref == 'refs/heads/main'
         run: terraform apply -input=false tfplan
+
+      - name: Afficher l'adresse du site
+        run: terraform output -raw container_url
