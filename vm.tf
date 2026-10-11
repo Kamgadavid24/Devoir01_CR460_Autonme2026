@@ -18,7 +18,7 @@ resource "azurerm_windows_virtual_machine" "windows" {
   size                = var.vm_size
 
   admin_username = "kamga_david"
-  admin_password = var.vm_admin_password
+  admin_password = azurerm_key_vault_secret.vm_password.value
 
   network_interface_ids = [
     azurerm_network_interface.windows_est.id
