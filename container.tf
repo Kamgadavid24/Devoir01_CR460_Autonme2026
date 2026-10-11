@@ -18,10 +18,7 @@ resource "azurerm_container_group" "docker" {
     }
   }
 
-  tags = {
-    projet = "CR460"
-    auteur = "David-Kamga"
-  }
+  tags = local.common_tags
 }
 
 output "container_public_ip" {

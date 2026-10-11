@@ -3,6 +3,8 @@ resource "azurerm_virtual_network" "windows_est" {
   location            = "canadaeast"
   resource_group_name = azurerm_resource_group.lab.name
   address_space       = ["10.30.0.0/16"]
+
+  tags = local.common_tags
 }
 
 resource "azurerm_subnet" "windows_est" {
@@ -22,4 +24,6 @@ resource "azurerm_network_interface" "windows_est" {
     subnet_id                     = azurerm_subnet.windows_est.id
     private_ip_address_allocation = "Dynamic"
   }
+
+  tags = local.common_tags
 }

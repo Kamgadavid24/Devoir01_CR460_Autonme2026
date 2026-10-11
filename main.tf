@@ -15,10 +15,7 @@ resource "azurerm_resource_group" "lab" {
   name     = var.resource_group_name
   location = var.location
 
-  tags = {
-    projet = "CR460"
-    auteur = "David-Kamga"
-  }
+  tags = local.common_tags
 }
 
 resource "azurerm_virtual_network" "lab" {
@@ -26,6 +23,8 @@ resource "azurerm_virtual_network" "lab" {
   address_space       = ["10.20.0.0/16"]
   location            = azurerm_resource_group.lab.location
   resource_group_name = azurerm_resource_group.lab.name
+
+  tags = local.common_tags
 }
 
 resource "azurerm_subnet" "serveurs" {

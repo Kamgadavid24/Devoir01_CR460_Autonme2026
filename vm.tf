@@ -8,6 +8,8 @@ resource "azurerm_network_interface" "windows" {
     subnet_id                     = azurerm_subnet.serveurs.id
     private_ip_address_allocation = "Dynamic"
   }
+
+  tags = local.common_tags
 }
 
 resource "azurerm_windows_virtual_machine" "windows" {
@@ -37,10 +39,7 @@ resource "azurerm_windows_virtual_machine" "windows" {
     version   = "latest"
   }
 
-  tags = {
-    projet = "CR460"
-    auteur = "David-Kamga"
-  }
+  tags = local.common_tags
 }
 
 output "windows_private_ip" {
