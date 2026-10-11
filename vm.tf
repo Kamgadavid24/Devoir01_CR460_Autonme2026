@@ -11,11 +11,11 @@ resource "azurerm_network_interface" "windows" {
 }
 
 resource "azurerm_windows_virtual_machine" "windows" {
-  name                = "vm-win-cr460"
+  name                = var.vm_name
   computer_name       = "win-cr460"
   resource_group_name = azurerm_resource_group.lab.name
-  location            = "canadaeast"
-  size                = "Standard_B2s_v2"
+  location            = var.vm_location
+  size                = var.vm_size
 
   admin_username = "kamga_david"
   admin_password = var.vm_admin_password
@@ -44,5 +44,6 @@ resource "azurerm_windows_virtual_machine" "windows" {
 }
 
 output "windows_private_ip" {
-  value = azurerm_network_interface.windows_est.private_ip_address
+  description = "Adresse IP privée de la VM Windows"
+  value       = azurerm_network_interface.windows_est.private_ip_address
 }
