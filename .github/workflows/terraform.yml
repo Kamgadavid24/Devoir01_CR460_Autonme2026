@@ -12,21 +12,24 @@ concurrency:
   group: terraform-main
   cancel-in-progress: false
 
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  TF_VAR_vm_admin_password: ${{ secrets.VM_ADMIN_PASSWORD }}
+  TF_VAR_container_image_tag: ${{ github.sha }}
+
 jobs:
-  terraform:
-    name: Publication Docker et déploiement Azure
+  plan:
+    name: Publication Docker et Terraform plan
     runs-on: ubuntu-22.04
     if: github.ref == 'refs/heads/main'
 
-    env:
-      TF_IN_AUTOMATION: "true"
-      TF_INPUT: "false"
-      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-      TF_VAR_vm_admin_password: ${{ secrets.VM_ADMIN_PASSWORD }}
-      TF_VAR_container_image_tag: ${{ github.sha }}
+    outputs:
+      terraform_version: ${{ steps.version.outputs.value }}
 
     steps:
       - name: Récupérer les fichiers du dépôt
@@ -38,17 +41,22 @@ jobs:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
           terraform_wrapper: false
 
+      - name: Identifier la version de Terraform
+        id: version
+        run: |
+          VERSION=$(terraform version -json | jq -r '.terraform_version')
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Vérifier le format
         run: terraform fmt -check -recursive
 
       - name: Initialiser Terraform
-        run: terraform init -input=false
+        run: terraform init -input=false -lockfile=readonly
 
       - name: Valider la configuration
         run: terraform validate
 
       - name: Se connecter à Azure
-        shell: bash
         run: |
           az login --service-principal \
             --username "$ARM_CLIENT_ID" \
@@ -58,14 +66,17 @@ jobs:
           az account set --subscription "$ARM_SUBSCRIPTION_ID"
 
       - name: Se connecter au registre ACR
-        shell: bash
         run: |
           ACR_NAME=$(terraform output -raw acr_name)
-          ACR_SERVER=$(az acr show --name "$ACR_NAME" --query loginServer --output tsv)
-          ACR_USERNAME=$(az acr credential show --name "$ACR_NAME" --query username --output tsv)
-          ACR_PASSWORD=$(az acr credential show --name "$ACR_NAME" --query 'passwords[0].value' --output tsv)
+          ACR_SERVER=$(az acr show --name "$ACR_NAME" \
+            --query loginServer --output tsv)
+          ACR_USERNAME=$(az acr credential show --name "$ACR_NAME" \
+            --query username --output tsv)
+          ACR_PASSWORD=$(az acr credential show --name "$ACR_NAME" \
+            --query 'passwords[0].value' --output tsv)
 
           echo "::add-mask::$ACR_PASSWORD"
+
           printf '%s' "$ACR_PASSWORD" | docker login "$ACR_SERVER" \
             --username "$ACR_USERNAME" \
             --password-stdin
@@ -73,18 +84,69 @@ jobs:
           echo "ACR_SERVER=$ACR_SERVER" >> "$GITHUB_ENV"
 
       - name: Construire l'image Docker
-        run: |
-          docker build \
-            --tag "$ACR_SERVER/cr460-web:$GITHUB_SHA" \
-            .
+        run: docker build -t "$ACR_SERVER/cr460-web:$GITHUB_SHA" .
 
       - name: Publier l'image dans ACR
         run: docker push "$ACR_SERVER/cr460-web:$GITHUB_SHA"
 
-      - name: Générer le plan
+      - name: Générer le plan à examiner
         run: terraform plan -input=false -out=tfplan
 
-      - name: Déployer les ressources Azure
+      - name: Chiffrer le plan
+        env:
+          PLAN_PASSWORD: ${{ secrets.TF_API_TOKEN }}
+        run: |
+          openssl enc -aes-256-cbc -salt -pbkdf2 \
+            -in tfplan \
+            -out tfplan.enc \
+            -pass env:PLAN_PASSWORD
+
+      - name: Conserver le plan chiffré
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tfplan.enc
+          retention-days: 1
+          if-no-files-found: error
+
+  apply:
+    name: Terraform apply après approbation
+    needs: plan
+    runs-on: ubuntu-22.04
+
+    environment:
+      name: azure-production
+
+    steps:
+      - name: Récupérer les fichiers du dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer la même version de Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ needs.plan.outputs.terraform_version }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+          terraform_wrapper: false
+
+      - name: Initialiser Terraform
+        run: terraform init -input=false -lockfile=readonly
+
+      - name: Récupérer le plan chiffré
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .
+
+      - name: Déchiffrer le plan approuvé
+        env:
+          PLAN_PASSWORD: ${{ secrets.TF_API_TOKEN }}
+        run: |
+          openssl enc -d -aes-256-cbc -pbkdf2 \
+            -in tfplan.enc \
+            -out tfplan \
+            -pass env:PLAN_PASSWORD
+
+      - name: Appliquer le plan approuvé
         run: terraform apply -input=false tfplan
 
       - name: Afficher l'adresse du site
